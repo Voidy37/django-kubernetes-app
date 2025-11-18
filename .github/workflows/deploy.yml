@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: voidy37/django-kubernetes-app  # ПРЯМОЕ УКАЗАНИЕ с маленькой буквой
   K8S_NAMESPACE: django-app
 
 jobs:
@@ -79,6 +79,11 @@ jobs:
       with:
         kubeconfig: ${{ secrets.KUBE_CONFIG }}
 
+    - name: Cleanup previous deployment
+      run: |
+        kubectl delete deployment django-deployment -n ${{ env.K8S_NAMESPACE }} --ignore-not-found=true
+        sleep 10
+
     - name: Deploy to Kubernetes
       run: |
         # Создаем namespace если не существует
@@ -87,11 +92,11 @@ jobs:
         # Применяем манифесты
         kubectl apply -f k8s-manifests/ -n ${{ env.K8S_NAMESPACE }}
         
-        # Обновляем образ в deployment
-        kubectl set image deployment/django-deployment django-app=${{ env.REGISTRY }}/${{ github.repository }}:latest -n ${{ env.K8S_NAMESPACE }}
+        # Обновляем образ с ПРАВИЛЬНЫМ именем (маленькие буквы)
+        kubectl set image deployment/django-deployment django-app=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest -n ${{ env.K8S_NAMESPACE }}
         
         # Ждем пока поды перезапустятся
-        kubectl rollout status deployment/django-deployment -n ${{ env.K8S_NAMESPACE }} --timeout=300s
+        kubectl rollout status deployment/django-deployment -n ${{ env.K8S_NAMESPACE }} --timeout=600s
         
         # Показываем статус
         kubectl get pods,svc,ingress -n ${{ env.K8S_NAMESPACE }}
