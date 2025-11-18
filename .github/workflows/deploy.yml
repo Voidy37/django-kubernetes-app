@@ -11,6 +11,12 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   K8S_NAMESPACE: django-app
 
+# Глобальные разрешения
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -37,39 +43,39 @@ jobs:
     permissions:
       contents: read
       packages: write
-      attestations: write
       id-token: write
-  
+
     steps:
     - uses: actions/checkout@v4
-  
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
     - name: Log in to Container Registry
       uses: docker/login-action@v3
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-  
+
     - name: Extract metadata for Docker
       id: meta
       uses: docker/metadata-action@v5
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         tags: |
-          type=sha,prefix={{branch}}-
-          type=ref,event=branch
-          type=ref,event=pr
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix=
           latest
-  
+
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
         context: .
-        push: ${{ github.event_name != 'pull_request' }}
+        push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
   deploy:
     needs: build-and-push
@@ -93,7 +99,7 @@ jobs:
         kubectl apply -f k8s-manifests/ -n ${{ env.K8S_NAMESPACE }}
         
         # Обновляем образ в deployment
-        kubectl set image deployment/django-deployment django-app=ghcr.io/voidy37/django-kubernetes-app:latest -n django-app
+        kubectl set image deployment/django-deployment django-app=${{ env.REGISTRY }}/${{ github.repository }}:latest -n ${{ env.K8S_NAMESPACE }}
         
         # Ждем пока поды перезапустятся
         kubectl rollout status deployment/django-deployment -n ${{ env.K8S_NAMESPACE }} --timeout=300s
